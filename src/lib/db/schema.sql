@@ -75,6 +75,36 @@ CREATE TABLE IF NOT EXISTS api_credentials (
 CREATE INDEX IF NOT EXISTS idx_api_credentials_model ON api_credentials(model_id);
 CREATE INDEX IF NOT EXISTS idx_api_credentials_status ON api_credentials(status);
 
+-- ─── Roles & Permissions (RBAC) ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS roles (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL UNIQUE,
+  description TEXT,
+  is_system   BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key         TEXT NOT NULL UNIQUE,
+  description TEXT,
+  category    TEXT NOT NULL DEFAULT 'general',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role_id       UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+  PRIMARY KEY (role_id, permission_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, role_id)
+);
+
 -- ─── Routing Rules ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS routing_rules (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

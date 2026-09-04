@@ -26,9 +26,9 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { name, model_id, priority, is_active } = body;
     if (!model_id) return NextResponse.json({ ok: false, error: "Model ID required" }, { status: 400 });
-    const row = await queryOne(
+    const row = await queryOne<{ id: string }>(
       `INSERT INTO routing_rules (name, model_id, priority, is_active)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
+       VALUES ($1, $2, $3, $4) RETURNING id`,
       [name || "Rule", model_id, priority || 100, is_active !== false]
     );
     await logAudit({ userId: user.id, action: "routing_rule_created", entityType: "routing_rule", entityId: row?.id, outcome: "success" });

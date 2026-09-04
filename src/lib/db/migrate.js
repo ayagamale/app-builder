@@ -46,6 +46,55 @@ async function main() {
     console.log("[migrate] created super_admin: " + email);
   }
 
+  // Seed system roles
+  await pool.query(`
+    INSERT INTO roles (name, description, is_system) VALUES
+      ('super_admin', 'Full platform access including security and role management', true),
+      ('admin', 'Operational admin: providers, models, keys, routing, logs, users', true),
+      ('user', 'Regular user — own projects only', true)
+    ON CONFLICT (name) DO NOTHING
+  `);
+  console.log("[migrate] roles seeded");
+
+  // Seed permissions
+  await pool.query(`
+    INSERT INTO permissions (key, description, category) VALUES
+      ('providers.manage', 'Manage AI providers', 'ai'),
+      ('models.manage', 'Manage AI models', 'ai'),
+      ('api_keys.manage', 'Manage API credentials', 'ai'),
+      ('routing.manage', 'Manage routing rules', 'ai'),
+      ('fallback.manage', 'Manage fallback rules', 'ai'),
+      ('users.manage', 'Manage users and their roles', 'users'),
+      ('roles.manage', 'Manage roles and permissions', 'users'),
+      ('projects.view_all', 'View all projects across users', 'projects'),
+      ('logs.view', 'View audit logs', 'system'),
+      ('security.manage', 'Manage security settings', 'system'),
+      ('settings.manage', 'Manage system settings', 'system')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  console.log("[migrate] permissions seeded");
+
+  // Grant all permissions to super_admin
+  await pool.query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id FROM roles r, permissions p
+    WHERE r.name = 'super_admin'
+    ON CONFLICT DO NOTHING
+  `);
+
+  // Grant operational permissions to admin (not security or roles management)
+  await pool.query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id FROM roles r, permissions p
+    WHERE r.name = 'admin' AND p.key IN (
+      'providers.manage', 'models.manage', 'api_keys.manage',
+      'routing.manage', 'fallback.manage', 'users.manage',
+      'logs.view', 'settings.manage', 'projects.view_all'
+    )
+    ON CONFLICT DO NOTHING
+  `);
+  console.log("[migrate] role permissions seeded");
+
   // Seed default system settings
   await pool.query(`
     INSERT INTO system_settings (key, value) VALUES

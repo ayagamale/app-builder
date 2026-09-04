@@ -155,7 +155,7 @@ async function markCredentialSuccess(credentialId: string): Promise<void> {
   );
 }
 
-export interface RequestResult {
+export type RequestResult = {
   ok: true;
   data: AiResponse;
   switches: { fromCredential?: string; toCredential: string; reason: string }[];
@@ -163,7 +163,7 @@ export interface RequestResult {
   ok: false;
   error: AiError;
   switches: { fromCredential?: string; toCredential: string; reason: string }[];
-}
+};
 
 /**
  * The AI Request Manager — the single entry point for all AI requests.
@@ -237,57 +237,60 @@ export async function executeAiRequest(
       const adapter = getAdapter(resolved.compatibilityType);
       const result = await adapter.chat(resolved, request);
 
-      if (result.ok) {
-        await markCredentialSuccess(cred.id);
+      if (!result.ok) {
+        // Failure — update credential status and continue
+        const err = (result as { ok: false; error: AiError }).error;
+        lastError = err;
+        await updateCredentialStatus(cred.id, err);
         await logAudit({
           userId,
-          action: "ai_request_success",
+          action: "api_failed",
           providerId: model.provider_id,
           modelId: model.model_id,
           apiCredentialId: cred.id,
-          outcome: "success",
-          metadata: { model: model.model_name, provider: model.provider_name },
+          reason: err.message,
+          outcome: "failure",
+          metadata: { code: err.code, httpStatus: err.httpStatus },
         });
 
-        // Notify about any switches that happened
-        if (switches.length > 0 && userId) {
-          await notify({
-            userId,
-            type: "api_switch",
-            level: "info",
-            message: `Request completed after ${switches.length} API switch(es). Final: ${model.provider_name} / ${model.model_name}`,
-          });
-        }
+        // Record the switch
+        switches.push({
+          fromCredential: switches.length > 0 ? undefined : cred.id,
+          toCredential: cred.id,
+          reason: err.message,
+        });
 
-        return { ok: true, data: result.data, switches };
+        // If the error is non-retryable (invalid key, quota), skip remaining
+        // keys for this model only if they're all likely the same issue
+        if (!err.retryable && err.code === "INVALID_KEY") {
+          break; // try the next model
+        }
+        continue;
       }
 
-      // Failure — update credential status and continue
-      lastError = result.error;
-      await updateCredentialStatus(cred.id, result.error);
+      // Success
+      await markCredentialSuccess(cred.id);
       await logAudit({
         userId,
-        action: "api_failed",
+        action: "ai_request_success",
         providerId: model.provider_id,
         modelId: model.model_id,
         apiCredentialId: cred.id,
-        reason: result.error.message,
-        outcome: "failure",
-        metadata: { code: result.error.code, httpStatus: result.error.httpStatus },
+        outcome: "success",
+        metadata: { model: model.model_name, provider: model.provider_name },
       });
 
-      // Record the switch
-      switches.push({
-        fromCredential: switches.length > 0 ? undefined : cred.id,
-        toCredential: cred.id, // will be updated by the next iteration
-        reason: result.error.message,
-      });
-
-      // If the error is non-retryable (invalid key, quota), skip remaining
-      // keys for this model only if they're all likely the same issue
-      if (!result.error.retryable && result.error.code === "INVALID_KEY") {
-        break; // try the next model
+      // Notify about any switches that happened
+      if (switches.length > 0 && userId) {
+        await notify({
+          userId,
+          type: "api_switch",
+          level: "info",
+          message: `Request completed after ${switches.length} API switch(es). Final: ${model.provider_name} / ${model.model_name}`,
+        });
       }
+
+      return { ok: true, data: result.data, switches };
     }
 
     // All credentials for this model exhausted — log the model switch
@@ -390,22 +393,23 @@ export async function healthCheckCredential(
   });
   const responseTimeMs = Date.now() - start;
 
-  if (result.ok) {
-    // Promote back to active if it was in a bad state
-    await query(
-      `UPDATE api_credentials
-       SET status = 'active', cooldown_until = NULL, last_error = NULL, last_error_at = NULL
-       WHERE id = $1 AND status NOT IN ('active', 'disabled')`,
-      [credentialId]
-    );
-    return { success: true, responseTimeMs };
+  if (!result.ok) {
+    // Update status based on the error
+    const err = (result as { ok: false; error: AiError }).error;
+    await updateCredentialStatus(credentialId, err);
+    return {
+      success: false,
+      responseTimeMs,
+      error: err.message,
+    };
   }
 
-  // Update status based on the error
-  await updateCredentialStatus(credentialId, result.error);
-  return {
-    success: false,
-    responseTimeMs,
-    error: result.error.message,
-  };
+  // Success — promote back to active if it was in a bad state
+  await query(
+    `UPDATE api_credentials
+     SET status = 'active', cooldown_until = NULL, last_error = NULL, last_error_at = NULL
+     WHERE id = $1 AND status NOT IN ('active', 'disabled')`,
+    [credentialId]
+  );
+  return { success: true, responseTimeMs };
 }

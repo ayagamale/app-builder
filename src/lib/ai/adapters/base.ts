@@ -1,4 +1,4 @@
-import type { AiRequest, AiResponse, ResolvedCredential, AiError } from "./types";
+import type { AiRequest, AiResponse, ResolvedCredential, AiError } from "../types";
 
 /**
  * Base adapter interface — each provider compatibility type implements this.

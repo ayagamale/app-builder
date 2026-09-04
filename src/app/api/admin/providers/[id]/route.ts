@@ -70,3 +70,73 @@ export async function DELETE(
     return NextResponse.json({ ok: false, error: "Failed" }, { status: 500 });
   }
 }
+
+/** Test connection — POST /api/admin/providers/[id] */
+export async function POST(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireRole("admin");
+    const { id } = await params;
+
+    const provider = await queryOne<{ base_url: string; compatibility_type: string }>(
+      "SELECT base_url, compatibility_type FROM ai_providers WHERE id = $1",
+      [id]
+    );
+    if (!provider) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+
+    // Simple connectivity test — ping the base URL
+    const testUrl = provider.compatibility_type === "anthropic"
+      ? `${provider.base_url.replace(/\/$/, "")}/v1/messages`
+      : `${provider.base_url.replace(/\/$/, "")}/v1/models`;
+
+    const start = Date.now();
+    try {
+      const res = await fetch(testUrl, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      const responseTimeMs = Date.now() - start;
+
+      // Any HTTP response (even 401) means the endpoint is reachable
+      const success = res.status < 500;
+      await logAudit({
+        userId: user.id,
+        action: "provider_test",
+        entityType: "provider",
+        entityId: id,
+        outcome: success ? "success" : "failure",
+        metadata: { httpStatus: res.status, responseTimeMs },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        data: {
+          success,
+          responseTimeMs,
+          httpStatus: res.status,
+          error: success ? undefined : `HTTP ${res.status}`,
+        },
+      });
+    } catch (fetchErr) {
+      const responseTimeMs = Date.now() - start;
+      await logAudit({
+        userId: user.id,
+        action: "provider_test",
+        entityType: "provider",
+        entityId: id,
+        outcome: "failure",
+        metadata: { error: String(fetchErr), responseTimeMs },
+      });
+      return NextResponse.json({
+        ok: true,
+        data: { success: false, responseTimeMs, error: "Connection failed" },
+      });
+    }
+  } catch (err) {
+    if (err instanceof Response) return err;
+    return NextResponse.json({ ok: false, error: "Failed" }, { status: 500 });
+  }
+}

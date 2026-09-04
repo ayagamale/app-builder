@@ -6,10 +6,16 @@ export async function GET(req: Request) {
   try {
     await requireRole("admin");
     const url = new URL(req.url);
-    const limit = parseInt(url.searchParams.get("limit") || "50");
-    const offset = parseInt(url.searchParams.get("offset") || "0");
-    const action = url.searchParams.get("action") || undefined;
-    const logs = await getAuditLogs({ limit, offset, action });
+    const logs = await getAuditLogs({
+      limit: parseInt(url.searchParams.get("limit") || "50"),
+      offset: parseInt(url.searchParams.get("offset") || "0"),
+      action: url.searchParams.get("action") || undefined,
+      outcome: url.searchParams.get("outcome") || undefined,
+      userId: url.searchParams.get("userId") || undefined,
+      entityType: url.searchParams.get("entityType") || undefined,
+      dateFrom: url.searchParams.get("dateFrom") || undefined,
+      dateTo: url.searchParams.get("dateTo") || undefined,
+    });
     return NextResponse.json({ ok: true, data: logs });
   } catch (err) {
     if (err instanceof Response) return err;

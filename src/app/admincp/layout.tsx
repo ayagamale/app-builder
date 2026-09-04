@@ -7,8 +7,9 @@ import { useAuth } from "@/lib/auth/context";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, Server, Cpu, KeyRound, Route, Shuffle,
-  ScrollText, Users, Shield, Settings, Sparkles, Loader2, LogOut,
+  ScrollText, Users, Shield, Settings, Sparkles, Loader2, LogOut, FolderKanban,
 } from "lucide-react";
+import { NotificationBell } from "@/components/admin/NotificationBell";
 
 const NAV = [
   { href: "/admincp", label: "Dashboard", icon: LayoutDashboard },
@@ -19,6 +20,7 @@ const NAV = [
   { href: "/admincp/fallback", label: "Fallback", icon: Shuffle },
   { href: "/admincp/logs", label: "Logs", icon: ScrollText },
   { href: "/admincp/users", label: "Users", icon: Users },
+  { href: "/admincp/roles", label: "Roles & Permissions", icon: Shield },
   { href: "/admincp/security", label: "Security", icon: Shield },
   { href: "/admincp/settings", label: "System Settings", icon: Settings },
 ];
@@ -57,6 +59,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Sparkles className="w-3.5 h-3.5 text-white" />
           </div>
           <span className="font-semibold text-white text-sm">AdminCP</span>
+          <div className="ml-auto">
+            <NotificationBell />
+          </div>
         </div>
         <nav className="flex-1 py-3 space-y-0.5 overflow-y-auto">
           {NAV.map((item) => {

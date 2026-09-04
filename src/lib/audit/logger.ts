@@ -39,25 +39,70 @@ export async function logAudit(entry: AuditEntry): Promise<void> {
   }
 }
 
-/** Fetch audit logs with pagination. */
+/** Fetch audit logs with pagination and filtering. */
 export async function getAuditLogs(
-  opts: { limit?: number; offset?: number; action?: string } = {}
+  opts: {
+    limit?: number;
+    offset?: number;
+    action?: string;
+    outcome?: string;
+    userId?: string;
+    entityType?: string;
+    providerId?: string;
+    modelId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  } = {}
 ) {
   const limit = Math.min(opts.limit || 50, 200);
   const offset = opts.offset || 0;
-  const params: unknown[] = [limit, offset];
-  let where = "";
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  let paramIdx = 1;
+
   if (opts.action) {
-    where = "WHERE action = $3";
+    conditions.push(`a.action = $${paramIdx++}`);
     params.push(opts.action);
   }
+  if (opts.outcome) {
+    conditions.push(`a.outcome = $${paramIdx++}`);
+    params.push(opts.outcome);
+  }
+  if (opts.userId) {
+    conditions.push(`a.user_id = $${paramIdx++}`);
+    params.push(opts.userId);
+  }
+  if (opts.entityType) {
+    conditions.push(`a.entity_type = $${paramIdx++}`);
+    params.push(opts.entityType);
+  }
+  if (opts.providerId) {
+    conditions.push(`a.provider_id = $${paramIdx++}`);
+    params.push(opts.providerId);
+  }
+  if (opts.modelId) {
+    conditions.push(`a.model_id = $${paramIdx++}`);
+    params.push(opts.modelId);
+  }
+  if (opts.dateFrom) {
+    conditions.push(`a.created_at >= $${paramIdx++}`);
+    params.push(opts.dateFrom);
+  }
+  if (opts.dateTo) {
+    conditions.push(`a.created_at <= $${paramIdx++}`);
+    params.push(opts.dateTo);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  params.push(limit, offset);
+
   const rows = await query(
     `SELECT a.*, u.email as user_email
      FROM audit_logs a
      LEFT JOIN users u ON a.user_id = u.id
      ${where}
      ORDER BY a.created_at DESC
-     LIMIT $1 OFFSET $2`,
+     LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
     params
   );
   return rows;

@@ -28,23 +28,24 @@ export async function POST(req: Request) {
       user.id
     );
 
-    if (result.ok) {
-      return NextResponse.json({
-        ok: true,
-        data: {
-          content: result.data.content,
-          model: result.data.model,
-          provider: result.data.provider,
-          switches: result.switches,
-          usage: result.data.usage,
-        },
-      });
+    if (!result.ok) {
+      const err = (result as { ok: false; error: { message: string; code: string }; switches: unknown[] }).error;
+      return NextResponse.json(
+        { ok: false, error: err.message, code: err.code, switches: result.switches },
+        { status: 502 }
+      );
     }
 
-    return NextResponse.json(
-      { ok: false, error: result.error.message, code: result.error.code, switches: result.switches },
-      { status: 502 }
-    );
+    return NextResponse.json({
+      ok: true,
+      data: {
+        content: result.data.content,
+        model: result.data.model,
+        provider: result.data.provider,
+        switches: result.switches,
+        usage: result.data.usage,
+      },
+    });
   } catch (err) {
     console.error("[ai/chat] error:", err);
     return NextResponse.json({ ok: false, error: "AI request failed" }, { status: 500 });

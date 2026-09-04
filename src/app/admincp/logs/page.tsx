@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ScrollText } from "lucide-react";
+import { ScrollText, X } from "lucide-react";
 
 interface LogEntry {
   id: string; action: string; outcome: string; reason: string | null;
@@ -12,15 +12,24 @@ interface LogEntry {
 export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionFilter, setActionFilter] = useState("");
+  const [filters, setFilters] = useState({ action: "", outcome: "", entityType: "", dateFrom: "", dateTo: "" });
 
   const fetchLogs = () => {
-    const qs = actionFilter ? `?action=${encodeURIComponent(actionFilter)}` : "";
-    fetch(`/api/admin/logs${qs}`).then(r => r.json()).then(d => { if (d.ok) setLogs(d.data); }).finally(() => setLoading(false));
+    const params = new URLSearchParams();
+    if (filters.action) params.set("action", filters.action);
+    if (filters.outcome) params.set("outcome", filters.outcome);
+    if (filters.entityType) params.set("entityType", filters.entityType);
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    const qs = params.toString();
+    fetch(`/api/admin/logs${qs ? `?${qs}` : ""}`).then(r => r.json()).then(d => { if (d.ok) setLogs(d.data); }).finally(() => setLoading(false));
   };
-  useEffect(fetchLogs, [actionFilter]);
+  useEffect(fetchLogs, [filters]);
 
   const outcomeColor = (o: string) => o === "success" ? "bg-emerald-500" : o === "failure" ? "bg-red-500" : "bg-blue-500";
+  const outcomeBadge = (o: string) => o === "success" ? "bg-emerald-50 text-emerald-700" : o === "failure" ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700";
+
+  const hasFilters = Object.values(filters).some(v => v);
 
   return (
     <div className="space-y-6">
@@ -29,11 +38,37 @@ export default function LogsPage() {
         <p className="text-sm text-gray-500 mt-1">All system events — secrets are never logged</p>
       </div>
 
-      <div className="flex gap-2">
-        <input value={actionFilter} onChange={e => setActionFilter(e.target.value)} placeholder="Filter by action..." className="flex-1 h-9 px-3 text-sm rounded-lg border border-gray-200 bg-white" />
-        <button onClick={() => setActionFilter("")} className="text-xs text-gray-500 hover:text-gray-700 px-3">Clear</button>
+      {/* Filters */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <input value={filters.action} onChange={e => setFilters({ ...filters, action: e.target.value })} placeholder="Action..." className="h-9 px-3 text-sm rounded-lg border border-gray-200" />
+          <select value={filters.outcome} onChange={e => setFilters({ ...filters, outcome: e.target.value })} className="h-9 px-3 text-sm rounded-lg border border-gray-200">
+            <option value="">All outcomes</option>
+            <option value="success">Success</option>
+            <option value="failure">Failure</option>
+            <option value="info">Info</option>
+          </select>
+          <select value={filters.entityType} onChange={e => setFilters({ ...filters, entityType: e.target.value })} className="h-9 px-3 text-sm rounded-lg border border-gray-200">
+            <option value="">All types</option>
+            <option value="provider">Provider</option>
+            <option value="model">Model</option>
+            <option value="api_credential">API Credential</option>
+            <option value="routing_rule">Routing Rule</option>
+            <option value="fallback_rule">Fallback Rule</option>
+            <option value="user">User</option>
+            <option value="role">Role</option>
+          </select>
+          <input type="date" value={filters.dateFrom} onChange={e => setFilters({ ...filters, dateFrom: e.target.value })} className="h-9 px-3 text-sm rounded-lg border border-gray-200" />
+          <input type="date" value={filters.dateTo} onChange={e => setFilters({ ...filters, dateTo: e.target.value })} className="h-9 px-3 text-sm rounded-lg border border-gray-200" />
+        </div>
+        {hasFilters && (
+          <button onClick={() => setFilters({ action: "", outcome: "", entityType: "", dateFrom: "", dateTo: "" })} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+            <X className="w-3 h-3" /> Clear filters
+          </button>
+        )}
       </div>
 
+      {/* Log entries */}
       {loading ? <p className="text-gray-400">Loading...</p> : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="divide-y divide-gray-100">
@@ -43,7 +78,7 @@ export default function LogsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-medium text-gray-700">{log.action}</span>
-                    <span className="text-[10px] text-gray-400">{log.outcome}</span>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${outcomeBadge(log.outcome)}`}>{log.outcome}</span>
                   </div>
                   {log.reason && <p className="text-xs text-gray-500 mt-0.5">{log.reason}</p>}
                   <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-400">

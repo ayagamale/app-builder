@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/context";
-import { Server, Cpu, KeyRound, Users, FolderKanban, AlertCircle, CheckCircle2, XCircle, Activity } from "lucide-react";
+import { Server, Cpu, KeyRound, Users, FolderKanban, AlertCircle, CheckCircle2, XCircle, Activity, Clock, Shuffle, TrendingUp } from "lucide-react";
 
 interface DashboardData {
   counts: {
     users: number; projects: number; providers: number; models: number;
-    apiKeys: number; activeApiKeys: number; errorApiKeys: number; totalLogs: number;
+    apiKeys: number; activeApiKeys: number; errorApiKeys: number; disabledApiKeys: number;
+    rateLimitedApiKeys: number; totalLogs: number; totalRequests: number;
   };
   rates: { success: number; failure: number };
   modelStats: { model_name: string; provider_name: string; total: string; success: string; failed: string }[];
   recentLogs: { action: string; outcome: string; created_at: string }[];
+  recentFailures: { action: string; reason: string | null; created_at: string }[];
+  recentFallbacks: { action: string; reason: string | null; created_at: string }[];
 }
 
 export default function AdminDashboard() {
@@ -37,6 +40,9 @@ export default function AdminDashboard() {
     { label: "API Keys", value: data.counts.apiKeys, icon: KeyRound, color: "text-amber-600" },
     { label: "Active Keys", value: data.counts.activeApiKeys, icon: CheckCircle2, color: "text-emerald-600" },
     { label: "Error Keys", value: data.counts.errorApiKeys, icon: AlertCircle, color: "text-red-600" },
+    { label: "Rate Limited", value: data.counts.rateLimitedApiKeys, icon: Clock, color: "text-amber-600" },
+    { label: "Disabled Keys", value: data.counts.disabledApiKeys, icon: XCircle, color: "text-gray-600" },
+    { label: "Total Requests", value: data.counts.totalRequests, icon: TrendingUp, color: "text-blue-600" },
     { label: "Total Logs", value: data.counts.totalLogs, icon: Activity, color: "text-gray-600" },
   ];
 
@@ -78,6 +84,40 @@ export default function AdminDashboard() {
           <span className="flex items-center gap-1.5 text-emerald-600"><CheckCircle2 className="w-4 h-4" /> {data.rates.success} success</span>
           <span className="flex items-center gap-1.5 text-red-600"><XCircle className="w-4 h-4" /> {data.rates.failure} failures</span>
         </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* Recent provider failures */}
+        {data.recentFailures && data.recentFailures.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><AlertCircle className="w-4 h-4 text-red-500" /> Recent Provider Failures</h2>
+            <div className="space-y-1.5">
+              {data.recentFailures.map((f, i) => (
+                <div key={i} className="flex items-center gap-3 text-sm py-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                  <span className="font-mono text-xs text-gray-600 flex-1 truncate">{f.reason || f.action}</span>
+                  <span className="text-xs text-gray-400">{new Date(f.created_at).toLocaleTimeString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent fallback events */}
+        {data.recentFallbacks && data.recentFallbacks.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><Shuffle className="w-4 h-4 text-amber-500" /> Recent Fallback Events</h2>
+            <div className="space-y-1.5">
+              {data.recentFallbacks.map((f, i) => (
+                <div key={i} className="flex items-center gap-3 text-sm py-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                  <span className="font-mono text-xs text-gray-600 flex-1 truncate">{f.reason || f.action}</span>
+                  <span className="text-xs text-gray-400">{new Date(f.created_at).toLocaleTimeString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Model consumption */}
