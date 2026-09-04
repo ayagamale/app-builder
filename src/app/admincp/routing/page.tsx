@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Route as RouteIcon, Plus, Loader2, Trash2 } from "lucide-react";
+import { Route as RouteIcon, Plus, Trash2, Power } from "lucide-react";
 import { toast } from "sonner";
 
 interface Rule { id: string; name: string; model_id: string; model_name: string; provider_name: string; priority: number; is_active: boolean; }
@@ -29,6 +29,16 @@ export default function RoutingPage() {
     else toast.error(data.error || "Failed");
   };
 
+  const handleDelete = async (id: string) => {
+    await fetch(`/api/admin/routing/${id}`, { method: "DELETE" });
+    toast.success("Rule deleted"); fetchAll();
+  };
+
+  const handleToggle = async (r: Rule) => {
+    await fetch(`/api/admin/routing/${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: !r.is_active }) });
+    fetchAll();
+  };
+
   if (loading) return <p className="text-gray-400">Loading...</p>;
 
   return (
@@ -53,6 +63,8 @@ export default function RoutingPage() {
             <RouteIcon className="w-5 h-5 text-gray-400 shrink-0" />
             <div className="flex-1"><h3 className="font-medium text-sm text-gray-900">{r.name}</h3><p className="text-xs text-gray-500">{r.provider_name} / {r.model_name} · Priority: {r.priority}</p></div>
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${r.is_active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>{r.is_active ? "Active" : "Disabled"}</span>
+            <Button variant="outline" size="sm" onClick={() => handleToggle(r)}><Power className="w-3.5 h-3.5 mr-1" />{r.is_active ? "Disable" : "Enable"}</Button>
+            <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-700"><Trash2 className="w-3.5 h-3.5" /></Button>
           </div>
         ))}
         {rules.length === 0 && <p className="text-center text-gray-400 py-12">No routing rules. Models are used by priority order by default.</p>}

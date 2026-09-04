@@ -73,25 +73,51 @@ interface ModelWithProvider {
 
 /**
  * Resolve the ordered list of (model → credentials) to try.
- * Models are ordered by priority; within each model, credentials are ordered
- * by priority and filtered to active + not-in-cooldown.
+ *
+ * If active routing rules exist, only the models referenced by those rules are
+ * included, ordered by the rules' priority. Otherwise all active models are
+ * used, ordered by model priority (the default behaviour).
+ *
+ * Within each model, credentials are ordered by priority and filtered to
+ * active + not-in-cooldown.
  */
 async function resolvePool(): Promise<
   { model: ModelWithProvider; credentials: CredentialWithKey[] }[]
 > {
+  // Check for active routing rules
+  const routingRules = await query<{ model_id: string }>(
+    `SELECT model_id FROM routing_rules WHERE is_active = true ORDER BY priority ASC`
+  );
+
+  const hasRoutingRules = routingRules.length > 0;
+
   // Get all active models with their provider info, ordered by priority
+  // (or filtered by routing rules if they exist)
   const models = await query<ModelWithProvider>(
-    `SELECT
-       m.id as model_id, m.name as model_name, m.display_name as model_display_name,
-       m.priority as model_priority,
-       p.id as provider_id, p.name as provider_name, p.base_url as provider_base_url,
-       p.auth_header_name as provider_auth_header_name,
-       p.auth_header_prefix as provider_auth_header_prefix,
-       p.compatibility_type as provider_compatibility_type
-     FROM ai_models m
-     JOIN ai_providers p ON m.provider_id = p.id
-     WHERE m.is_active = true AND p.is_active = true
-     ORDER BY m.priority ASC, m.created_at ASC`
+    hasRoutingRules
+      ? `SELECT
+           m.id as model_id, m.name as model_name, m.display_name as model_display_name,
+           m.priority as model_priority,
+           p.id as provider_id, p.name as provider_name, p.base_url as provider_base_url,
+           p.auth_header_name as provider_auth_header_name,
+           p.auth_header_prefix as provider_auth_header_prefix,
+           p.compatibility_type as provider_compatibility_type
+         FROM ai_models m
+         JOIN ai_providers p ON m.provider_id = p.id
+         JOIN routing_rules r ON r.model_id = m.id AND r.is_active = true
+         WHERE m.is_active = true AND p.is_active = true
+         ORDER BY r.priority ASC, m.created_at ASC`
+      : `SELECT
+           m.id as model_id, m.name as model_name, m.display_name as model_display_name,
+           m.priority as model_priority,
+           p.id as provider_id, p.name as provider_name, p.base_url as provider_base_url,
+           p.auth_header_name as provider_auth_header_name,
+           p.auth_header_prefix as provider_auth_header_prefix,
+           p.compatibility_type as provider_compatibility_type
+         FROM ai_models m
+         JOIN ai_providers p ON m.provider_id = p.id
+         WHERE m.is_active = true AND p.is_active = true
+         ORDER BY m.priority ASC, m.created_at ASC`
   );
 
   const pool: { model: ModelWithProvider; credentials: CredentialWithKey[] }[] = [];
@@ -115,6 +141,29 @@ async function resolvePool(): Promise<
   }
 
   return pool;
+}
+
+/**
+ * Load active fallback rules as a map of from_model_id → to_model_id.
+ * When a model's credentials are exhausted, the request manager checks this
+ * map to decide which model to try next instead of simply moving to the next
+ * model by priority.
+ */
+async function getFallbackMap(): Promise<Map<string, string>> {
+  const rules = await query<{ from_model_id: string; to_model_id: string }>(
+    `SELECT from_model_id, to_model_id
+     FROM fallback_rules
+     WHERE is_active = true
+     ORDER BY priority ASC`
+  );
+  const map = new Map<string, string>();
+  for (const r of rules) {
+    // First (highest-priority) fallback rule wins per source model
+    if (!map.has(r.from_model_id)) {
+      map.set(r.from_model_id, r.to_model_id);
+    }
+  }
+  return map;
 }
 
 /** Update a credential's status after a failure. */
@@ -199,10 +248,23 @@ export async function executeAiRequest(
     };
   }
 
+  const fallbackMap = await getFallbackMap();
+  const triedModelIds = new Set<string>();
+
   const switches: { fromCredential?: string; toCredential: string; reason: string }[] = [];
   let lastError: AiError | null = null;
 
-  for (const { model, credentials } of pool) {
+  let poolIndex = 0;
+  while (poolIndex < pool.length) {
+    const { model, credentials } = pool[poolIndex];
+
+    // Skip models we've already tried (e.g. via a fallback jump)
+    if (triedModelIds.has(model.model_id)) {
+      poolIndex++;
+      continue;
+    }
+    triedModelIds.add(model.model_id);
+
     for (const cred of credentials) {
       // Decrypt the API key
       let apiKey: string;
@@ -301,6 +363,27 @@ export async function executeAiRequest(
       reason: "All API credentials for this model exhausted",
       outcome: "info",
     });
+
+    // Check fallback rules for an explicit fallback target
+    const fallbackTargetId = fallbackMap.get(model.model_id);
+    if (fallbackTargetId) {
+      const fallbackIndex = pool.findIndex(
+        (p) => p.model.model_id === fallbackTargetId
+      );
+      if (fallbackIndex >= 0 && !triedModelIds.has(fallbackTargetId)) {
+        await logAudit({
+          userId,
+          action: "fallback_triggered",
+          modelId: fallbackTargetId,
+          reason: `Fallback from ${model.model_name} to fallback model`,
+          outcome: "info",
+        });
+        poolIndex = fallbackIndex;
+        continue;
+      }
+    }
+
+    poolIndex++;
   }
 
   // All models and credentials exhausted

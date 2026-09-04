@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Shuffle, Plus } from "lucide-react";
+import { Shuffle, Plus, Trash2, Power } from "lucide-react";
 import { toast } from "sonner";
 
 interface Rule { id: string; name: string; from_model_id: string; to_model_id: string; from_model_name: string; to_model_name: string; priority: number; is_active: boolean; }
@@ -27,6 +27,16 @@ export default function FallbackPage() {
     const data = await res.json();
     if (data.ok) { toast.success("Fallback rule added"); setShowAdd(false); setForm({ name: "", from_model_id: "", to_model_id: "", priority: 100 }); fetchAll(); }
     else toast.error(data.error || "Failed");
+  };
+
+  const handleDelete = async (id: string) => {
+    await fetch(`/api/admin/fallback/${id}`, { method: "DELETE" });
+    toast.success("Rule deleted"); fetchAll();
+  };
+
+  const handleToggle = async (r: Rule) => {
+    await fetch(`/api/admin/fallback/${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: !r.is_active }) });
+    fetchAll();
   };
 
   if (loading) return <p className="text-gray-400">Loading...</p>;
@@ -69,6 +79,8 @@ export default function FallbackPage() {
               <p className="text-xs text-gray-500">{r.from_model_name} → {r.to_model_name} · Priority: {r.priority}</p>
             </div>
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${r.is_active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>{r.is_active ? "Active" : "Disabled"}</span>
+            <Button variant="outline" size="sm" onClick={() => handleToggle(r)}><Power className="w-3.5 h-3.5 mr-1" />{r.is_active ? "Disable" : "Enable"}</Button>
+            <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-700"><Trash2 className="w-3.5 h-3.5" /></Button>
           </div>
         ))}
         {rules.length === 0 && <p className="text-center text-gray-400 py-12">No fallback rules. The system automatically falls back to the next model by priority when all keys for a model are exhausted.</p>}
