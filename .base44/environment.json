@@ -1,0 +1,12 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "TOTALUM_VCAAS_API_KEY",
+      "description": "Your Totalum VCaaS API key — the only credential this app needs. Get one free at https://www.totalum.app/api (choose 'Use the Totalum API' during onboarding). Without it the app boots and shows a setup banner, but you cannot create or build projects.",
+      "requiredAtBoot": false
+    }
+  ]
+}

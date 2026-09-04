@@ -1,0 +1,27 @@
+# Base44 dev environment for ai-app-builder-open (Next.js 16).
+# Runs the app FROM THE CLONED SOURCE via `next dev` with live reload.
+# The user-facing web entry point is on host port 3000.
+services:
+  web:
+    image: node:22
+    working_dir: /app
+    # Bind-mount the cloned source so edits appear without image rebuilds.
+    volumes:
+      - ./:/app
+      # Keep container-installed node_modules isolated from any host copy.
+      - /app/node_modules
+      # Keep the Next build cache out of the bind mount for speed.
+      - /app/.next
+    ports:
+      - "3000:3000"
+    # Placeholders first (app boots with an empty key and shows the setup
+    # banner); real secrets in /run/base44/app.env override them.
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    environment:
+      # Derived preview origin so Next.js allows dev assets/HMR from the
+      # preview iframe. Never hardcode the suffix — it changes per environment.
+      - BASE44_PUBLIC_HOST_SUFFIX=${BASE44_PUBLIC_HOST_SUFFIX}
+    command: sh -c "npm install && npx next dev -H 0.0.0.0 -p 3000"
+    restart: unless-stopped
