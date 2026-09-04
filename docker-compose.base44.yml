@@ -2,9 +2,27 @@
 # Runs the app FROM THE CLONED SOURCE via `next dev` with live reload.
 # The user-facing web entry point is on host port 3000.
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vibebuild
+      POSTGRES_PASSWORD: vibebuild_dev
+      POSTGRES_DB: vibebuild
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vibebuild"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   web:
     image: node:22
     working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
     # Bind-mount the cloned source so edits appear without image rebuilds.
     volumes:
       - ./:/app
@@ -23,5 +41,9 @@ services:
       # Derived preview origin so Next.js allows dev assets/HMR from the
       # preview iframe. Never hardcode the suffix — it changes per environment.
       - BASE44_PUBLIC_HOST_SUFFIX=${BASE44_PUBLIC_HOST_SUFFIX}
-    command: sh -c "npm install && npx next dev -H 0.0.0.0 -p 3000"
+      - DATABASE_URL=postgresql://vibebuild:vibebuild_dev@db:5432/vibebuild
+    command: sh -c "npm install && node src/lib/db/migrate.js && npx next dev -H 0.0.0.0 -p 3000"
     restart: unless-stopped
+
+volumes:
+  pgdata:

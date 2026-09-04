@@ -5,7 +5,27 @@
   "secrets": [
     {
       "name": "TOTALUM_VCAAS_API_KEY",
-      "description": "Your Totalum VCaaS API key — the only credential this app needs. Get one free at https://www.totalum.app/api (choose 'Use the Totalum API' during onboarding). Without it the app boots and shows a setup banner, but you cannot create or build projects.",
+      "description": "Legacy Totalum API key — being phased out. Still needed for existing project sandbox/preview functionality during migration.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "ENCRYPTION_MASTER_KEY",
+      "description": "32-byte hex key for AES-256-GCM encryption of AI provider API keys at rest. Generate with: openssl rand -hex 32",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "JWT_SECRET",
+      "description": "Secret used to sign JWT auth tokens. Use a long random string in production.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "ADMIN_EMAIL",
+      "description": "Email for the initial super_admin account created on first migration.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "ADMIN_PASSWORD",
+      "description": "Password for the initial super_admin account created on first migration.",
       "requiredAtBoot": false
     }
   ]
