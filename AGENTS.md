@@ -125,3 +125,26 @@ Keep your own price separate from Totalum's credit cost; `GET /api/v1/vcaas/cred
 ## Git
 
 Small, single-purpose commits. Run `npm run build` before opening a PR. PR description: what changed, why, and how it was verified in the browser.
+
+## Base44 dev environment
+
+The app runs in the Base44 sandbox via `docker-compose.base44.yml` (not the repo's own
+production compose). It is a single-origin Next.js 16 app served on host port 3000.
+
+- **Run:** `docker compose -f docker-compose.base44.yml up -d` (or `--build` after
+  dependency changes). The `web` service bind-mounts the source and runs
+  `npx next dev -H 0.0.0.0 -p 3000` with live reload; `node_modules` and `.next`
+  are anonymous volumes so host copies don't leak in.
+- **Secret:** `TOTALUM_VCAAS_API_KEY` is the only credential. It is delivered by the
+  platform to `/run/base44/app.env` (outside the repo) and wired in as the LAST
+  `env_file:` entry so it overrides the empty placeholder in `.env.base44-defaults`.
+  The app boots and shows a setup banner without it, but cannot create/build projects.
+  Verify it reached the process: `docker compose -f docker-compose.base44.yml exec -T
+  web sh -c 'printenv TOTALUM_VCAAS_API_KEY >/dev/null && echo present || echo missing'`
+  (never print the value). `/api/config` returns `{"configured": true}` when set.
+- **Preview origin:** `next.config.ts` derives `allowedDevOrigins` from
+  `BASE44_PUBLIC_HOST_SUFFIX` (passed into the service's `environment:`) so the
+  preview iframe's dev assets/HMR are allowed. A bare `"*"` does not match it.
+- **Verify it works:** `curl -sf -H "Host: external-preview.example.com"
+  http://localhost:3000/` returns the app (the plain localhost curl cannot catch a
+  blocked-host failure). `curl -sf http://localhost:3000/api/config` reports the key.
